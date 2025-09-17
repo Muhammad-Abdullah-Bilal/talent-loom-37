@@ -1,0 +1,235 @@
+import { useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
+import { 
+  MoreHorizontal, 
+  MessageSquare, 
+  Eye, 
+  ArrowRight,
+  Star,
+  Calendar
+} from "lucide-react";
+import { mockPipelineItems } from "@/lib/mockData";
+import { PipelineItem, PipelineStage } from "@/types";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+
+const PIPELINE_STAGES: { stage: PipelineStage; title: string; color: string }[] = [
+  { stage: 'sourced', title: 'Sourced', color: 'bg-gray-100 text-gray-800' },
+  { stage: 'shortlisted', title: 'Shortlisted', color: 'bg-blue-100 text-blue-800' },
+  { stage: 'interview', title: 'Interview', color: 'bg-yellow-100 text-yellow-800' },
+  { stage: 'offer', title: 'Offer', color: 'bg-purple-100 text-purple-800' },
+  { stage: 'hired', title: 'Hired', color: 'bg-green-100 text-green-800' },
+  { stage: 'rejected', title: 'Rejected', color: 'bg-red-100 text-red-800' },
+];
+
+export default function Pipeline() {
+  const [pipelineItems, setPipelineItems] = useState(mockPipelineItems);
+
+  const moveCandidate = (candidateId: string, newStage: PipelineStage) => {
+    setPipelineItems(items =>
+      items.map(item =>
+        item.id === candidateId
+          ? { ...item, stage: newStage, updatedAt: new Date().toISOString() }
+          : item
+      )
+    );
+  };
+
+  const getCandidatesByStage = (stage: PipelineStage) => {
+    return pipelineItems.filter(item => item.stage === stage);
+  };
+
+  const PipelineCard = ({ item }: { item: PipelineItem }) => {
+    const daysAgo = Math.floor((Date.now() - new Date(item.updatedAt).getTime()) / (1000 * 60 * 60 * 24));
+    
+    return (
+      <Card className="mb-3 hover:shadow-md transition-shadow cursor-pointer">
+        <CardHeader className="pb-3">
+          <div className="flex items-start justify-between">
+            <div className="flex items-center space-x-3">
+              <Avatar className="h-10 w-10">
+                <AvatarImage src={item.candidate.avatar} />
+                <AvatarFallback>
+                  {item.candidate.name.split(' ').map(n => n[0]).join('')}
+                </AvatarFallback>
+              </Avatar>
+              <div className="min-w-0 flex-1">
+                <CardTitle className="text-sm font-semibold truncate">
+                  {item.candidate.name}
+                </CardTitle>
+                <p className="text-xs text-muted-foreground truncate">
+                  {item.jobTitle}
+                </p>
+              </div>
+            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm">
+                  <MoreHorizontal className="w-4 h-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem>
+                  <Eye className="w-4 h-4 mr-2" />
+                  View Profile
+                </DropdownMenuItem>
+                <DropdownMenuItem>
+                  <MessageSquare className="w-4 h-4 mr-2" />
+                  Send Message
+                </DropdownMenuItem>
+                {PIPELINE_STAGES.filter(s => s.stage !== item.stage).map(stage => (
+                  <DropdownMenuItem 
+                    key={stage.stage}
+                    onClick={() => moveCandidate(item.id, stage.stage)}
+                  >
+                    <ArrowRight className="w-4 h-4 mr-2" />
+                    Move to {stage.title}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </CardHeader>
+        
+        <CardContent className="pt-0">
+          <div className="space-y-2">
+            {/* Match Score */}
+            {item.matchScore && (
+              <div className="flex items-center space-x-1">
+                <Star className="w-3 h-3 text-warning fill-warning" />
+                <span className="text-xs text-muted-foreground">
+                  {item.matchScore}% match
+                </span>
+              </div>
+            )}
+
+            {/* Skills */}
+            <div className="flex flex-wrap gap-1">
+              {item.candidate.skills.slice(0, 2).map((skill, index) => (
+                <Badge key={index} variant="outline" className="text-xs py-0">
+                  {skill}
+                </Badge>
+              ))}
+              {item.candidate.skills.length > 2 && (
+                <Badge variant="outline" className="text-xs py-0">
+                  +{item.candidate.skills.length - 2}
+                </Badge>
+              )}
+            </div>
+
+            {/* Notes */}
+            {item.notes && (
+              <p className="text-xs text-muted-foreground line-clamp-2">
+                {item.notes}
+              </p>
+            )}
+
+            {/* Timestamp */}
+            <div className="flex items-center text-xs text-muted-foreground">
+              <Calendar className="w-3 h-3 mr-1" />
+              <span>{daysAgo === 0 ? 'Today' : `${daysAgo}d ago`}</span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
+
+  const StageColumn = ({ stage, title, color }: { stage: PipelineStage; title: string; color: string }) => {
+    const candidates = getCandidatesByStage(stage);
+    
+    return (
+      <div className="flex-1 min-w-72">
+        <div className="mb-4">
+          <div className={`rounded-lg px-3 py-2 ${color} flex items-center justify-between`}>
+            <h3 className="font-semibold text-sm">{title}</h3>
+            <Badge variant="secondary" className="text-xs">
+              {candidates.length}
+            </Badge>
+          </div>
+        </div>
+        
+        <div className="space-y-2 max-h-[calc(100vh-300px)] overflow-y-auto">
+          {candidates.map((item) => (
+            <PipelineCard key={item.id} item={item} />
+          ))}
+          
+          {candidates.length === 0 && (
+            <div className="text-center py-8 text-muted-foreground">
+              <p className="text-sm">No candidates in this stage</p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const totalCandidates = pipelineItems.length;
+  const activeStages = PIPELINE_STAGES.filter(stage => getCandidatesByStage(stage.stage).length > 0);
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">Candidate Pipeline</h1>
+          <p className="text-muted-foreground">
+            Track candidates through your hiring process
+          </p>
+        </div>
+        <div className="text-right">
+          <div className="text-2xl font-bold">{totalCandidates}</div>
+          <div className="text-sm text-muted-foreground">Total Candidates</div>
+        </div>
+      </div>
+
+      {/* Pipeline Overview */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Pipeline Overview</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex justify-between items-center">
+            {PIPELINE_STAGES.slice(0, -1).map((stage, index) => {
+              const count = getCandidatesByStage(stage.stage).length;
+              const isLast = index === PIPELINE_STAGES.length - 2;
+              
+              return (
+                <div key={stage.stage} className="flex items-center">
+                  <div className="text-center">
+                    <div className={`w-12 h-12 rounded-full ${stage.color} flex items-center justify-center font-semibold`}>
+                      {count}
+                    </div>
+                    <div className="text-xs mt-1 font-medium">{stage.title}</div>
+                  </div>
+                  {!isLast && (
+                    <ArrowRight className="w-4 h-4 text-muted-foreground mx-4" />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Pipeline Board */}
+      <div className="flex space-x-6 overflow-x-auto pb-4">
+        {PIPELINE_STAGES.map((stage) => (
+          <StageColumn
+            key={stage.stage}
+            stage={stage.stage}
+            title={stage.title}
+            color={stage.color}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
