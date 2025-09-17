@@ -1,27 +1,58 @@
-How to run this Project
+# TalentLoom - AI-Powered Recruiting Platform
 
-Follow these steps:
+A modern, comprehensive recruiting platform built for enterprise-level talent acquisition with AI-powered matching, pipeline management, and advanced analytics.
+
+## 🚀 Features
+
+- **Smart Candidate Matching** - AI-powered compatibility analysis
+- **Pipeline Management** - Visual kanban-style hiring workflow
+- **Advanced Analytics** - Comprehensive reporting and KPIs
+- **Offer Management** - Streamlined offer creation and tracking
+- **Real-time Updates** - Live notifications and data synchronization
+- **Export Capabilities** - CSV/PDF report generation
+
+## 🛠 Technologies
+
+- **Frontend**: React 18, TypeScript, Vite
+- **UI Framework**: shadcn/ui, Tailwind CSS
+- **State Management**: React Query (TanStack Query)
+- **Form Handling**: React Hook Form + Zod validation
+- **Charts**: Recharts
+- **Icons**: Lucide React
+
+## 📦 Installation
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
+# Clone the repository
 git clone <YOUR_GIT_URL>
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+# Navigate to project directory
+cd talent-loom-37
 
-# Step 3: Install the necessary dependencies.
-npm i
+# Install dependencies
+npm install
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Start development server
 npm run dev
 ```
 
-## What technologies are used for this project?
+## 🏗 Build
 
-This project is built with:
+```sh
+# Production build
+npm run build
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+# Preview production build
+npm run preview
+```
+
+## 📋 Project Structure
+
+```
+src/
+├── components/     # Reusable UI components
+├── hooks/         # Custom React hooks
+├── lib/           # Utilities and API functions
+├── pages/         # Application pages/routes
+└── types/         # TypeScript type definitions
+```

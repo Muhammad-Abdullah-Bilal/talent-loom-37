@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Skeleton } from "@/components/ui/skeleton";
 import { 
   Search, 
   Filter, 
@@ -12,10 +13,13 @@ import {
   DollarSign,
   Plus,
   Eye,
-  MessageSquare
+  MessageSquare,
+  AlertCircle
 } from "lucide-react";
-import { mockCandidates, mockMatchScores } from "@/lib/mockData";
+import { useCandidates, useCandidateSearch, useAddToPipeline } from "@/hooks/useApi";
+import { mockMatchScores } from "@/lib/mockData";
 import { Candidate, CandidateFilters } from "@/types";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Select,
   SelectContent,
@@ -39,21 +43,39 @@ export default function Candidates() {
     experienceLevel: [],
     availability: []
   });
-  
   const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null);
 
-  // Filter candidates based on search and filters
-  const filteredCandidates = mockCandidates.filter(candidate => {
-    const matchesSearch = candidate.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         candidate.skills.some(skill => skill.toLowerCase().includes(searchQuery.toLowerCase()));
-    
-    return matchesSearch;
-  });
+  // Use search query if it's long enough, otherwise get all candidates
+  const { data: searchResults, isLoading: searchLoading } = useCandidateSearch(searchQuery);
+  const { data: allCandidates, isLoading: candidatesLoading, error } = useCandidates(filters);
+  const addToPipelineMutation = useAddToPipeline();
+
+  const candidates = useMemo(() => {
+    if (searchQuery.length > 2) {
+      return searchResults || [];
+    }
+    return allCandidates || [];
+  }, [searchQuery, searchResults, allCandidates]);
+
+  const isLoading = searchQuery.length > 2 ? searchLoading : candidatesLoading;
 
   const handleShortlist = (candidateId: string) => {
-    // Mock shortlist action
-    console.log("Shortlisting candidate:", candidateId);
+    // For demo purposes, add to first available job
+    addToPipelineMutation.mutate({ candidateId, jobId: '1' });
   };
+
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            Failed to load candidates. Please try refreshing the page.
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
 
   const CandidateCard = ({ candidate }: { candidate: Candidate }) => {
     const matchScore = mockMatchScores.find(m => m.candidateId === candidate.id);
@@ -140,9 +162,10 @@ export default function Candidates() {
                 e.stopPropagation();
                 handleShortlist(candidate.id);
               }}
+              disabled={addToPipelineMutation.isPending}
             >
               <Plus className="w-3 h-3 mr-1" />
-              Shortlist
+              {addToPipelineMutation.isPending ? 'Adding...' : 'Shortlist'}
             </Button>
             <Button 
               size="sm" 
@@ -166,9 +189,9 @@ export default function Candidates() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Candidate Search</h1>
+          <h1 className="text-3xl font-bold">Talent Discovery</h1>
           <p className="text-muted-foreground">
-            Discover and shortlist talented candidates for your roles
+            Search and discover top candidates using AI-powered matching
           </p>
         </div>
       </div>
@@ -256,7 +279,7 @@ export default function Candidates() {
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <p className="text-sm text-muted-foreground">
-            Found {filteredCandidates.length} candidates
+            {isLoading ? 'Loading...' : `Found ${candidates.length} candidates`}
           </p>
           <Select defaultValue="match">
             <SelectTrigger className="w-40">
@@ -271,9 +294,47 @@ export default function Candidates() {
         </div>
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {filteredCandidates.map((candidate) => (
-            <CandidateCard key={candidate.id} candidate={candidate} />
-          ))}
+          {isLoading ? (
+            Array.from({ length: 6 }).map((_, index) => (
+              <Card key={index} className="hover:shadow-lg transition-shadow">
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center space-x-3">
+                      <Skeleton className="h-12 w-12 rounded-full" />
+                      <div className="space-y-2">
+                        <Skeleton className="h-4 w-24" />
+                        <Skeleton className="h-3 w-32" />
+                      </div>
+                    </div>
+                    <Skeleton className="h-5 w-16" />
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex flex-wrap gap-1">
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      <Skeleton key={i} className="h-5 w-16" />
+                    ))}
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-4">
+                      <Skeleton className="h-3 w-8" />
+                      <Skeleton className="h-3 w-20" />
+                    </div>
+                    <Skeleton className="h-5 w-16" />
+                  </div>
+                  <Skeleton className="h-3 w-full" />
+                  <div className="flex space-x-2">
+                    <Skeleton className="h-8 flex-1" />
+                    <Skeleton className="h-8 w-16" />
+                  </div>
+                </CardContent>
+              </Card>
+            ))
+          ) : (
+            candidates.map((candidate) => (
+              <CandidateCard key={candidate.id} candidate={candidate} />
+            ))
+          )}
         </div>
       </div>
 

@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
 import { 
   Target, 
   Star, 
@@ -11,10 +12,11 @@ import {
   Plus,
   Eye,
   Zap,
-  Brain
+  Brain,
+  AlertCircle
 } from "lucide-react";
-import { mockCandidates, mockJobPostings, mockMatchScores } from "@/lib/mockData";
-import { MatchScore } from "@/types";
+import { useMatches, useCandidates, useJobs, useAddToPipeline } from "@/hooks/useApi";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Select,
   SelectContent,
@@ -24,19 +26,36 @@ import {
 } from "@/components/ui/select";
 
 export default function Matches() {
+  const { data: matches, isLoading: matchesLoading, error } = useMatches();
+  const { data: candidates } = useCandidates();
+  const { data: jobs } = useJobs();
+  const addToPipelineMutation = useAddToPipeline();
+
   // Combine match data with candidate and job info
-  const enrichedMatches = mockMatchScores.map(match => {
-    const candidate = mockCandidates.find(c => c.id === match.candidateId);
-    const job = mockJobPostings.find(j => j.id === match.jobId);
+  const enrichedMatches = (matches || []).map(match => {
+    const candidate = candidates?.find(c => c.id === match.candidateId);
+    const job = jobs?.find(j => j.id === match.jobId);
     return { ...match, candidate, job };
   }).filter(match => match.candidate && match.job);
 
-  const getScoreColor = (score: number) => {
-    if (score >= 90) return "text-green-600";
-    if (score >= 80) return "text-blue-600";
-    if (score >= 70) return "text-yellow-600";
-    return "text-gray-600";
+  const handleAddToPipeline = (candidateId: string, jobId: string) => {
+    addToPipelineMutation.mutate({ candidateId, jobId });
   };
+
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            Failed to load matches data. Please try refreshing the page.
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
+
 
   const getScoreBadgeVariant = (score: number) => {
     if (score >= 90) return "default";
@@ -174,9 +193,14 @@ export default function Matches() {
 
           {/* Actions */}
           <div className="flex space-x-2 pt-2">
-            <Button size="sm" className="flex-1">
+            <Button 
+              size="sm" 
+              className="flex-1"
+              onClick={() => handleAddToPipeline(candidate.id, job.id)}
+              disabled={addToPipelineMutation.isPending}
+            >
               <Plus className="w-3 h-3 mr-1" />
-              Add to Pipeline
+              {addToPipelineMutation.isPending ? 'Adding...' : 'Add to Pipeline'}
             </Button>
             <Button size="sm" variant="outline">
               <Eye className="w-3 h-3 mr-1" />
@@ -193,9 +217,9 @@ export default function Matches() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">AI Matches</h1>
+          <h1 className="text-3xl font-bold">Smart Matching</h1>
           <p className="text-muted-foreground">
-            Discover the best candidates for your job openings using AI-powered matching
+            AI-powered candidate matching with detailed compatibility analysis
           </p>
         </div>
         <div className="flex items-center space-x-4">
@@ -205,11 +229,11 @@ export default function Matches() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Jobs</SelectItem>
-              {mockJobPostings.map(job => (
+              {jobs?.map(job => (
                 <SelectItem key={job.id} value={job.id}>
                   {job.title}
                 </SelectItem>
-              ))}
+              )) || []}
             </SelectContent>
           </Select>
         </div>
@@ -243,7 +267,7 @@ export default function Matches() {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Average Score</CardTitle>
             <div className="text-2xl font-bold">
-              {Math.round(enrichedMatches.reduce((sum, m) => sum + m.score, 0) / enrichedMatches.length)}%
+              {enrichedMatches.length > 0 ? Math.round(enrichedMatches.reduce((sum, m) => sum + m.score, 0) / enrichedMatches.length) : 0}%
             </div>
           </CardHeader>
         </Card>
@@ -286,11 +310,55 @@ export default function Matches() {
 
       {/* Match Results */}
       <div className="grid gap-6 lg:grid-cols-2">
-        {enrichedMatches
-          .sort((a, b) => b.score - a.score)
-          .map((match) => (
-            <MatchCard key={`${match.candidateId}-${match.jobId}`} match={match} />
-          ))}
+        {matchesLoading ? (
+          Array.from({ length: 4 }).map((_, index) => (
+            <Card key={index} className="hover:shadow-lg transition-shadow">
+              <CardHeader className="pb-4">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-start space-x-4">
+                    <Skeleton className="h-12 w-12 rounded-full" />
+                    <div className="flex-1 space-y-2">
+                      <Skeleton className="h-4 w-32" />
+                      <Skeleton className="h-3 w-24" />
+                      <Skeleton className="h-3 w-40" />
+                    </div>
+                  </div>
+                  <Skeleton className="h-6 w-20" />
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <Skeleton className="h-16 w-full" />
+                <div className="space-y-3">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i} className="flex items-center justify-between">
+                      <Skeleton className="h-4 w-24" />
+                      <div className="flex items-center space-x-2">
+                        <Skeleton className="w-16 h-2" />
+                        <Skeleton className="w-8 h-3" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <Skeleton className="h-16 w-full" />
+                <div className="flex flex-wrap gap-1">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <Skeleton key={i} className="h-5 w-16" />
+                  ))}
+                </div>
+                <div className="flex space-x-2">
+                  <Skeleton className="h-8 flex-1" />
+                  <Skeleton className="h-8 w-24" />
+                </div>
+              </CardContent>
+            </Card>
+          ))
+        ) : (
+          enrichedMatches
+            .sort((a, b) => b.score - a.score)
+            .map((match) => (
+              <MatchCard key={`${match.candidateId}-${match.jobId}`} match={match} />
+            ))
+        )}
       </div>
     </div>
   );

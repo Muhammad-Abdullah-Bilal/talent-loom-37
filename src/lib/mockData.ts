@@ -1,5 +1,8 @@
 import { Candidate, JobPosting, PipelineItem, Offer, KPIData, MatchScore } from '@/types';
 
+// Mock API delay for realistic loading states
+export const mockApiDelay = (ms: number = 1000) => new Promise(resolve => setTimeout(resolve, ms));
+
 // Mock Candidates Data
 export const mockCandidates: Candidate[] = [
   {

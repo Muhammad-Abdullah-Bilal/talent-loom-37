@@ -27,7 +27,7 @@ export function AppLayout({ children }: AppLayoutProps) {
           <header className="h-16 border-b bg-card/50 backdrop-blur-sm flex items-center justify-between px-6 sticky top-0 z-50">
             <div className="flex items-center gap-4">
               <SidebarTrigger />
-              <div className="font-semibold text-foreground">TalentFlow</div>
+              <div className="font-semibold text-foreground">TalentLoom</div>
             </div>
             
             <div className="flex items-center gap-4">

@@ -3,15 +3,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { 
   MoreHorizontal, 
   MessageSquare, 
   Eye, 
   ArrowRight,
   Star,
-  Calendar
+  Calendar,
+  AlertCircle
 } from "lucide-react";
-import { mockPipelineItems } from "@/lib/mockData";
+import { usePipeline, useMovePipelineCandidate } from "@/hooks/useApi";
 import { PipelineItem, PipelineStage } from "@/types";
 import {
   DropdownMenu,
@@ -19,6 +21,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { toast } from "sonner";
 
 const PIPELINE_STAGES: { stage: PipelineStage; title: string; color: string }[] = [
   { stage: 'sourced', title: 'Sourced', color: 'bg-gray-100 text-gray-800' },
@@ -30,27 +34,48 @@ const PIPELINE_STAGES: { stage: PipelineStage; title: string; color: string }[] 
 ];
 
 export default function Pipeline() {
-  const [pipelineItems, setPipelineItems] = useState(mockPipelineItems);
+  const { data: pipelineItems, isLoading, error } = usePipeline();
+  const moveCandidateMutation = useMovePipelineCandidate();
 
-  const moveCandidate = (candidateId: string, newStage: PipelineStage) => {
-    setPipelineItems(items =>
-      items.map(item =>
-        item.id === candidateId
-          ? { ...item, stage: newStage, updatedAt: new Date().toISOString() }
-          : item
-      )
-    );
+  const moveCandidate = (itemId: string, newStage: PipelineStage) => {
+    moveCandidateMutation.mutate({ itemId, newStage });
   };
 
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            Failed to load pipeline data. Please try refreshing the page.
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
   const getCandidatesByStage = (stage: PipelineStage) => {
-    return pipelineItems.filter(item => item.stage === stage);
+    return pipelineItems?.filter(item => item.stage === stage) || [];
   };
 
   const PipelineCard = ({ item }: { item: PipelineItem }) => {
     const daysAgo = Math.floor((Date.now() - new Date(item.updatedAt).getTime()) / (1000 * 60 * 60 * 24));
     
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        // Handle card selection/focus
+      }
+    };
+    
     return (
-      <Card className="mb-3 hover:shadow-md transition-shadow cursor-pointer">
+      <Card 
+        className="mb-3 hover:shadow-md transition-shadow cursor-pointer focus:ring-2 focus:ring-primary focus:outline-none" 
+        tabIndex={0}
+        onKeyDown={handleKeyDown}
+        role="button"
+        aria-label={`${item.candidate.name} - ${item.jobTitle} - ${item.stage} stage`}
+      >
         <CardHeader className="pb-3">
           <div className="flex items-start justify-between">
             <div className="flex items-center space-x-3">
@@ -88,6 +113,7 @@ export default function Pipeline() {
                   <DropdownMenuItem 
                     key={stage.stage}
                     onClick={() => moveCandidate(item.id, stage.stage)}
+                    disabled={moveCandidateMutation.isPending}
                   >
                     <ArrowRight className="w-4 h-4 mr-2" />
                     Move to {stage.title}
@@ -157,31 +183,62 @@ export default function Pipeline() {
         </div>
         
         <div className="space-y-2 max-h-[calc(100vh-300px)] overflow-y-auto">
-          {candidates.map((item) => (
-            <PipelineCard key={item.id} item={item} />
-          ))}
-          
-          {candidates.length === 0 && (
-            <div className="text-center py-8 text-muted-foreground">
-              <p className="text-sm">No candidates in this stage</p>
-            </div>
+          {isLoading ? (
+            Array.from({ length: 2 }).map((_, index) => (
+              <Card key={index} className="mb-3">
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center space-x-3">
+                      <Skeleton className="h-10 w-10 rounded-full" />
+                      <div className="space-y-2">
+                        <Skeleton className="h-4 w-24" />
+                        <Skeleton className="h-3 w-32" />
+                      </div>
+                    </div>
+                    <Skeleton className="h-8 w-8" />
+                  </div>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <div className="space-y-2">
+                    <Skeleton className="h-3 w-16" />
+                    <div className="flex gap-1">
+                      <Skeleton className="h-5 w-12" />
+                      <Skeleton className="h-5 w-16" />
+                    </div>
+                    <Skeleton className="h-3 w-full" />
+                    <Skeleton className="h-3 w-20" />
+                  </div>
+                </CardContent>
+              </Card>
+            ))
+          ) : (
+            <>
+              {candidates.map((item) => (
+                <PipelineCard key={item.id} item={item} />
+              ))}
+              
+              {candidates.length === 0 && (
+                <div className="text-center py-8 text-muted-foreground">
+                  <p className="text-sm">No candidates in this stage</p>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
     );
   };
 
-  const totalCandidates = pipelineItems.length;
-  const activeStages = PIPELINE_STAGES.filter(stage => getCandidatesByStage(stage.stage).length > 0);
+  const totalCandidates = pipelineItems?.length || 0;
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Candidate Pipeline</h1>
+          <h1 className="text-3xl font-bold">Hiring Pipeline</h1>
           <p className="text-muted-foreground">
-            Track candidates through your hiring process
+            Manage candidates through each stage of your hiring process
           </p>
         </div>
         <div className="text-right">

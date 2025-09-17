@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Skeleton } from "@/components/ui/skeleton";
 import { 
   Users, 
   BriefcaseIcon, 
@@ -11,21 +12,35 @@ import {
   Clock, 
   Target,
   Search,
-  Plus
+  Plus,
+  AlertCircle
 } from "lucide-react";
-import { mockKPIData, mockPipelineItems, mockJobPostings } from "@/lib/mockData";
+import { useDashboard, usePipeline, useJobs } from "@/hooks/useApi";
 import { Link } from "react-router-dom";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export default function Dashboard() {
-  console.log("Dashboard component is rendering");
-  
-  const kpiData = mockKPIData;
-  const recentMatches = mockPipelineItems.slice(0, 3);
-  const activeJobs = mockJobPostings.filter(job => job.status === 'active').slice(0, 3);
+  const { data: kpiData, isLoading: kpiLoading, error: kpiError } = useDashboard();
+  const { data: pipelineData, isLoading: pipelineLoading } = usePipeline();
+  const { data: jobsData, isLoading: jobsLoading } = useJobs();
 
-  console.log("Dashboard data loaded:", { kpiData, recentMatches: recentMatches.length, activeJobs: activeJobs.length });
+  const recentMatches = pipelineData?.slice(0, 3) || [];
+  const activeJobs = jobsData?.filter(job => job.status === 'active').slice(0, 3) || [];
 
-  const kpiCards = [
+  if (kpiError) {
+    return (
+      <div className="space-y-6">
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            Failed to load dashboard data. Please try refreshing the page.
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
+  const kpiCards = kpiData ? [
     {
       title: "Total Candidates",
       value: kpiData.totalCandidates.toLocaleString(),
@@ -54,16 +69,16 @@ export default function Dashboard() {
       icon: TrendingUp,
       color: "text-success"
     }
-  ];
+  ] : [];
 
   return (
     <div className="space-y-8">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
+          <h1 className="text-3xl font-bold text-foreground">Recruiting Dashboard</h1>
           <p className="text-muted-foreground">
-            Welcome back! Here's your recruiting overview.
+            Welcome to TalentLoom. Monitor your hiring performance and key metrics.
           </p>
         </div>
         <div className="flex gap-3">
@@ -84,21 +99,36 @@ export default function Dashboard() {
 
       {/* KPI Cards */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-        {kpiCards.map((kpi, index) => {
-          const Icon = kpi.icon;
-          return (
+        {kpiLoading ? (
+          Array.from({ length: 4 }).map((_, index) => (
             <Card key={index} className="relative overflow-hidden">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">{kpi.title}</CardTitle>
-                <Icon className={`h-4 w-4 ${kpi.color}`} />
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-4 w-4" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{kpi.value}</div>
-                <p className="text-xs text-muted-foreground">{kpi.description}</p>
+                <Skeleton className="h-8 w-16 mb-2" />
+                <Skeleton className="h-3 w-32" />
               </CardContent>
             </Card>
-          );
-        })}
+          ))
+        ) : (
+          kpiCards.map((kpi, index) => {
+            const Icon = kpi.icon;
+            return (
+              <Card key={index} className="relative overflow-hidden">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">{kpi.title}</CardTitle>
+                  <Icon className={`h-4 w-4 ${kpi.color}`} />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{kpi.value}</div>
+                  <p className="text-xs text-muted-foreground">{kpi.description}</p>
+                </CardContent>
+              </Card>
+            );
+          })
+        )}
       </div>
 
       {/* Main Content Grid */}
@@ -115,35 +145,58 @@ export default function Dashboard() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            {/* Average Time to Hire */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Average Time to Hire</span>
-                <span className="text-sm text-muted-foreground">{kpiData.averageTimeToHire} days</span>
+            {kpiLoading ? (
+              <div className="space-y-6">
+                <div className="space-y-2">
+                  <Skeleton className="h-4 w-48" />
+                  <Skeleton className="h-2 w-full" />
+                </div>
+                <div className="space-y-2">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-2 w-full" />
+                </div>
+                <div className="space-y-3">
+                  <Skeleton className="h-4 w-40" />
+                  <div className="flex flex-wrap gap-2">
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <Skeleton key={i} className="h-6 w-20" />
+                    ))}
+                  </div>
+                </div>
               </div>
-              <Progress value={65} className="h-2" />
-            </div>
+            ) : kpiData ? (
+              <>
+                {/* Average Time to Hire */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">Average Time to Hire</span>
+                    <span className="text-sm text-muted-foreground">{kpiData.averageTimeToHire} days</span>
+                  </div>
+                  <Progress value={65} className="h-2" />
+                </div>
 
-            {/* Conversion Rate */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Conversion Rate</span>
-                <span className="text-sm text-muted-foreground">{kpiData.conversionRate}%</span>
-              </div>
-              <Progress value={kpiData.conversionRate} className="h-2" />
-            </div>
+                {/* Conversion Rate */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">Conversion Rate</span>
+                    <span className="text-sm text-muted-foreground">{kpiData.conversionRate}%</span>
+                  </div>
+                  <Progress value={kpiData.conversionRate} className="h-2" />
+                </div>
 
-            {/* Top Skills */}
-            <div>
-              <h4 className="text-sm font-medium mb-3">Most In-Demand Skills</h4>
-              <div className="flex flex-wrap gap-2">
-                {kpiData.topSkills.slice(0, 5).map((skill, index) => (
-                  <Badge key={index} variant="secondary">
-                    {skill.skill} ({skill.count})
-                  </Badge>
-                ))}
-              </div>
-            </div>
+                {/* Top Skills */}
+                <div>
+                  <h4 className="text-sm font-medium mb-3">Most In-Demand Skills</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {kpiData.topSkills.slice(0, 5).map((skill, index) => (
+                      <Badge key={index} variant="secondary">
+                        {skill.skill} ({skill.count})
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              </>
+            ) : null}
           </CardContent>
         </Card>
 
@@ -200,31 +253,49 @@ export default function Dashboard() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {recentMatches.map((match) => (
-              <div key={match.id} className="flex items-center space-x-4">
-                <Avatar>
-                  <AvatarImage src={match.candidate.avatar} />
-                  <AvatarFallback>
-                    {match.candidate.name.split(' ').map(n => n[0]).join('')}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex-1 space-y-1">
-                  <p className="text-sm font-medium">{match.candidate.name}</p>
-                  <p className="text-xs text-muted-foreground">{match.jobTitle}</p>
+            {pipelineLoading ? (
+              Array.from({ length: 3 }).map((_, index) => (
+                <div key={index} className="flex items-center space-x-4">
+                  <Skeleton className="h-10 w-10 rounded-full" />
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-3 w-24" />
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Skeleton className="h-5 w-16" />
+                    <Skeleton className="h-5 w-20" />
+                  </div>
                 </div>
-                <div className="flex items-center space-x-2">
-                  <Badge variant="secondary" className="text-xs">
-                    {match.matchScore}% match
-                  </Badge>
-                  <Badge variant={
-                    match.stage === 'offer' ? 'default' : 
-                    match.stage === 'interview' ? 'secondary' : 'outline'
-                  }>
-                    {match.stage}
-                  </Badge>
+              ))
+            ) : (
+              recentMatches.map((match) => (
+                <div key={match.id} className="flex items-center space-x-4">
+                  <Avatar>
+                    <AvatarImage src={match.candidate.avatar} />
+                    <AvatarFallback>
+                      {match.candidate.name.split(' ').map(n => n[0]).join('')}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 space-y-1">
+                    <p className="text-sm font-medium">{match.candidate.name}</p>
+                    <p className="text-xs text-muted-foreground">{match.jobTitle}</p>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    {match.matchScore && (
+                      <Badge variant="secondary" className="text-xs">
+                        {match.matchScore}% match
+                      </Badge>
+                    )}
+                    <Badge variant={
+                      match.stage === 'offer' ? 'default' : 
+                      match.stage === 'interview' ? 'secondary' : 'outline'
+                    }>
+                      {match.stage}
+                    </Badge>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </CardContent>
         </Card>
 
@@ -242,28 +313,47 @@ export default function Dashboard() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {activeJobs.map((job) => (
-              <div key={job.id} className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-medium">{job.title}</h4>
-                  <Badge variant="outline">{job.experienceLevel}</Badge>
-                </div>
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span>{job.companyName}</span>
-                  <div className="flex items-center space-x-4">
-                    <span className="flex items-center">
-                      <Users className="w-3 h-3 mr-1" />
-                      {job.applicationsCount}
-                    </span>
-                    <span className="flex items-center">
-                      <Clock className="w-3 h-3 mr-1" />
-                      {Math.floor((Date.now() - new Date(job.createdAt).getTime()) / (1000 * 60 * 60 * 24))}d
-                    </span>
+            {jobsLoading ? (
+              Array.from({ length: 3 }).map((_, index) => (
+                <div key={index} className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Skeleton className="h-4 w-40" />
+                    <Skeleton className="h-5 w-16" />
                   </div>
+                  <div className="flex items-center justify-between">
+                    <Skeleton className="h-3 w-24" />
+                    <div className="flex items-center space-x-4">
+                      <Skeleton className="h-3 w-8" />
+                      <Skeleton className="h-3 w-8" />
+                    </div>
+                  </div>
+                  <Skeleton className="h-1 w-full" />
                 </div>
-                <Progress value={(job.applicationsCount / 50) * 100} className="h-1" />
-              </div>
-            ))}
+              ))
+            ) : (
+              activeJobs.map((job) => (
+                <div key={job.id} className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-sm font-medium">{job.title}</h4>
+                    <Badge variant="outline">{job.experienceLevel}</Badge>
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>{job.companyName}</span>
+                    <div className="flex items-center space-x-4">
+                      <span className="flex items-center">
+                        <Users className="w-3 h-3 mr-1" />
+                        {job.applicationsCount}
+                      </span>
+                      <span className="flex items-center">
+                        <Clock className="w-3 h-3 mr-1" />
+                        {Math.floor((Date.now() - new Date(job.createdAt).getTime()) / (1000 * 60 * 60 * 24))}d
+                      </span>
+                    </div>
+                  </div>
+                  <Progress value={(job.applicationsCount / 50) * 100} className="h-1" />
+                </div>
+              ))
+            )}
           </CardContent>
         </Card>
       </div>

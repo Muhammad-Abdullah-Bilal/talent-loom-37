@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { 
   Download, 
   FileSpreadsheet, 
@@ -12,9 +13,14 @@ import {
   Target,
   Clock,
   DollarSign,
-  BarChart3
+  BarChart3,
+  AlertCircle,
+  Loader2
 } from "lucide-react";
-import { mockKPIData } from "@/lib/mockData";
+import { useDashboard, usePipeline, useOffers } from "@/hooks/useApi";
+import { reportsApi } from "@/lib/api";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { toast } from "sonner";
 import {
   Select,
   SelectContent,
@@ -36,8 +42,24 @@ import {
 export default function Reports() {
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
   const [selectedReport, setSelectedReport] = useState("overview");
+  const [isExporting, setIsExporting] = useState(false);
 
-  const kpiData = mockKPIData;
+  const { data: kpiData, isLoading: kpiLoading, error } = useDashboard();
+  const { data: pipelineData } = usePipeline();
+  const { data: offersData } = useOffers();
+
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            Failed to load reports data. Please try refreshing the page.
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
 
   // Mock report data
   const reportData = [
@@ -93,16 +115,63 @@ export default function Reports() {
     }
   ];
 
-  const handleExportCSV = () => {
-    // Mock CSV export
-    console.log("Exporting CSV...");
-    // In real implementation, would generate and download CSV
+  const handleExportCSV = async () => {
+    if (!reportData.length) {
+      toast.error("No data to export");
+      return;
+    }
+
+    setIsExporting(true);
+    try {
+      const csvContent = await reportsApi.exportCSV(reportData);
+      
+      // Create and download CSV file
+      const blob = new Blob([csvContent], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `hiring-report-${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      toast.success("CSV exported successfully!");
+    } catch (error) {
+      toast.error("Failed to export CSV");
+      console.error("CSV export error:", error);
+    } finally {
+      setIsExporting(false);
+    }
   };
 
-  const handleExportPDF = () => {
-    // Mock PDF export
-    console.log("Exporting PDF...");
-    // In real implementation, would generate and download PDF
+  const handleExportPDF = async () => {
+    if (!reportData.length) {
+      toast.error("No data to export");
+      return;
+    }
+
+    setIsExporting(true);
+    try {
+      const pdfBlob = await reportsApi.exportPDF(reportData);
+      
+      // Create and download PDF file
+      const url = window.URL.createObjectURL(pdfBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `hiring-report-${new Date().toISOString().split('T')[0]}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      toast.success("PDF exported successfully!");
+    } catch (error) {
+      toast.error("Failed to export PDF");
+      console.error("PDF export error:", error);
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const getStageColor = (stage: string) => {
@@ -120,18 +189,34 @@ export default function Reports() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Reports & Analytics</h1>
+          <h1 className="text-3xl font-bold">Analytics & Insights</h1>
           <p className="text-muted-foreground">
-            Track hiring performance and export operational data
+            Comprehensive hiring analytics with exportable reports and KPIs
           </p>
         </div>
         <div className="flex items-center space-x-2">
-          <Button variant="outline" onClick={handleExportCSV}>
-            <FileSpreadsheet className="w-4 h-4 mr-2" />
+          <Button 
+            variant="outline" 
+            onClick={handleExportCSV}
+            disabled={isExporting || kpiLoading}
+          >
+            {isExporting ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <FileSpreadsheet className="w-4 h-4 mr-2" />
+            )}
             Export CSV
           </Button>
-          <Button variant="outline" onClick={handleExportPDF}>
-            <Download className="w-4 h-4 mr-2" />
+          <Button 
+            variant="outline" 
+            onClick={handleExportPDF}
+            disabled={isExporting || kpiLoading}
+          >
+            {isExporting ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <Download className="w-4 h-4 mr-2" />
+            )}
             Export PDF
           </Button>
         </div>
@@ -139,49 +224,66 @@ export default function Reports() {
 
       {/* KPI Dashboard */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Time to Hire</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{kpiData.averageTimeToHire} days</div>
-            <p className="text-xs text-muted-foreground">Average across all positions</p>
-          </CardContent>
-        </Card>
+        {kpiLoading ? (
+          Array.from({ length: 4 }).map((_, index) => (
+            <Card key={index}>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-4 w-4" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-8 w-16 mb-2" />
+                <Skeleton className="h-3 w-32" />
+              </CardContent>
+            </Card>
+          ))
+        ) : kpiData ? (
+          <>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Time to Hire</CardTitle>
+                <Clock className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{kpiData.averageTimeToHire} days</div>
+                <p className="text-xs text-muted-foreground">Average across all positions</p>
+              </CardContent>
+            </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Conversion Rate</CardTitle>
-            <Target className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{kpiData.conversionRate}%</div>
-            <p className="text-xs text-muted-foreground">Application to hire ratio</p>
-          </CardContent>
-        </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Conversion Rate</CardTitle>
+                <Target className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{kpiData.conversionRate}%</div>
+                <p className="text-xs text-muted-foreground">Application to hire ratio</p>
+              </CardContent>
+            </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Hires</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{kpiData.hiredThisMonth}</div>
-            <p className="text-xs text-muted-foreground">This month</p>
-          </CardContent>
-        </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Total Hires</CardTitle>
+                <Users className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{kpiData.hiredThisMonth}</div>
+                <p className="text-xs text-muted-foreground">This month</p>
+              </CardContent>
+            </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Pipeline</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{kpiData.totalCandidates}</div>
-            <p className="text-xs text-muted-foreground">Candidates in process</p>
-          </CardContent>
-        </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Active Pipeline</CardTitle>
+                <TrendingUp className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{kpiData.totalCandidates}</div>
+                <p className="text-xs text-muted-foreground">Candidates in process</p>
+              </CardContent>
+            </Card>
+          </>
+        ) : null}
       </div>
 
       {/* Hiring Funnel */}
@@ -196,30 +298,47 @@ export default function Reports() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            {kpiData.hiringFunnel.map((stage, index) => {
-              const percentage = (stage.count / kpiData.hiringFunnel[0].count) * 100;
-              return (
-                <div key={stage.stage} className="flex items-center space-x-4">
-                  <div className="w-24 text-sm font-medium">{stage.stage}</div>
+          {kpiLoading ? (
+            <div className="space-y-4">
+              {Array.from({ length: 5 }).map((_, index) => (
+                <div key={index} className="flex items-center space-x-4">
+                  <Skeleton className="w-24 h-4" />
                   <div className="flex-1">
                     <div className="flex items-center space-x-2">
-                      <div className="flex-1 bg-muted rounded-full h-2">
-                        <div 
-                          className="bg-gradient-primary h-2 rounded-full transition-all"
-                          style={{ width: `${percentage}%` }}
-                        />
-                      </div>
-                      <div className="text-sm font-medium w-16">{stage.count}</div>
-                      <div className="text-xs text-muted-foreground w-12">
-                        {percentage.toFixed(0)}%
-                      </div>
+                      <Skeleton className="flex-1 h-2" />
+                      <Skeleton className="w-16 h-4" />
+                      <Skeleton className="w-12 h-3" />
                     </div>
                   </div>
                 </div>
-              );
-            })}
-          </div>
+              ))}
+            </div>
+          ) : kpiData ? (
+            <div className="space-y-4">
+              {kpiData.hiringFunnel.map((stage, index) => {
+                const percentage = (stage.count / kpiData.hiringFunnel[0].count) * 100;
+                return (
+                  <div key={stage.stage} className="flex items-center space-x-4">
+                    <div className="w-24 text-sm font-medium">{stage.stage}</div>
+                    <div className="flex-1">
+                      <div className="flex items-center space-x-2">
+                        <div className="flex-1 bg-muted rounded-full h-2">
+                          <div 
+                            className="bg-gradient-primary h-2 rounded-full transition-all"
+                            style={{ width: `${percentage}%` }}
+                          />
+                        </div>
+                        <div className="text-sm font-medium w-16">{stage.count}</div>
+                        <div className="text-xs text-muted-foreground w-12">
+                          {percentage.toFixed(0)}%
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 
@@ -333,27 +452,43 @@ export default function Reports() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            {kpiData.topSkills.map((skill, index) => {
-              const percentage = (skill.count / kpiData.topSkills[0].count) * 100;
-              return (
-                <div key={skill.skill} className="flex items-center space-x-4">
-                  <div className="w-20 text-sm font-medium">{skill.skill}</div>
+          {kpiLoading ? (
+            <div className="space-y-4">
+              {Array.from({ length: 5 }).map((_, index) => (
+                <div key={index} className="flex items-center space-x-4">
+                  <Skeleton className="w-20 h-4" />
                   <div className="flex-1">
                     <div className="flex items-center space-x-2">
-                      <div className="flex-1 bg-muted rounded-full h-2">
-                        <div 
-                          className="bg-gradient-primary h-2 rounded-full transition-all"
-                          style={{ width: `${percentage}%` }}
-                        />
-                      </div>
-                      <div className="text-sm font-medium w-12">{skill.count}</div>
+                      <Skeleton className="flex-1 h-2" />
+                      <Skeleton className="w-12 h-4" />
                     </div>
                   </div>
                 </div>
-              );
-            })}
-          </div>
+              ))}
+            </div>
+          ) : kpiData ? (
+            <div className="space-y-4">
+              {kpiData.topSkills.map((skill, index) => {
+                const percentage = (skill.count / kpiData.topSkills[0].count) * 100;
+                return (
+                  <div key={skill.skill} className="flex items-center space-x-4">
+                    <div className="w-20 text-sm font-medium">{skill.skill}</div>
+                    <div className="flex-1">
+                      <div className="flex items-center space-x-2">
+                        <div className="flex-1 bg-muted rounded-full h-2">
+                          <div 
+                            className="bg-gradient-primary h-2 rounded-full transition-all"
+                            style={{ width: `${percentage}%` }}
+                          />
+                        </div>
+                        <div className="text-sm font-medium w-12">{skill.count}</div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
         </CardContent>
       </Card>
     </div>

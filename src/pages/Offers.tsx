@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Skeleton } from "@/components/ui/skeleton";
 import { 
   Plus, 
   Eye, 
@@ -13,10 +14,12 @@ import {
   XCircle,
   Send,
   FileText,
-  MoreHorizontal
+  MoreHorizontal,
+  AlertCircle
 } from "lucide-react";
-import { mockOffers } from "@/lib/mockData";
+import { useOffers, useCreateOffer, useCandidates, useJobs } from "@/hooks/useApi";
 import { Offer } from "@/types";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Dialog,
   DialogContent,
@@ -34,6 +37,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import {
   Select,
   SelectContent,
@@ -41,10 +45,67 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { offerSchema, OfferFormData } from "@/lib/validations";
 
 export default function Offers() {
-  const [offers, setOffers] = useState(mockOffers);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  
+  const { data: offers, isLoading, error } = useOffers();
+  const { data: candidates } = useCandidates();
+  const { data: jobs } = useJobs();
+  const createOfferMutation = useCreateOffer();
+
+  const form = useForm<OfferFormData>({
+    resolver: zodResolver(offerSchema),
+    defaultValues: {
+      candidateId: '',
+      jobId: '',
+      salary: {
+        amount: 0,
+        currency: 'USD',
+        frequency: 'yearly',
+      },
+      startDate: '',
+      expiresAt: '',
+      terms: '',
+      benefits: [],
+    },
+  });
+
+  const onSubmit = (data: OfferFormData) => {
+    const candidate = candidates?.find(c => c.id === data.candidateId);
+    const job = jobs?.find(j => j.id === data.jobId);
+    
+    if (!candidate || !job) return;
+
+    createOfferMutation.mutate({
+      ...data,
+      candidate,
+      jobTitle: job.title,
+      status: 'draft' as const,
+      benefits: data.benefits || [],
+    }, {
+      onSuccess: () => {
+        setIsCreateDialogOpen(false);
+        form.reset();
+      },
+    });
+  };
+
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            Failed to load offers data. Please try refreshing the page.
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
 
   const getStatusIcon = (status: Offer['status']) => {
     switch (status) {
@@ -226,118 +287,207 @@ export default function Offers() {
           </DialogDescription>
         </DialogHeader>
         
-        <div className="space-y-4 py-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="candidate">Candidate</Label>
-              <Select>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select candidate" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="1">Sarah Chen</SelectItem>
-                  <SelectItem value="2">Marcus Johnson</SelectItem>
-                  <SelectItem value="3">Elena Rodriguez</SelectItem>
-                </SelectContent>
-              </Select>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="candidateId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Candidate</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select candidate" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {candidates?.map((candidate) => (
+                          <SelectItem key={candidate.id} value={candidate.id}>
+                            {candidate.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={form.control}
+                name="jobId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Job Position</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select job" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {jobs?.map((job) => (
+                          <SelectItem key={job.id} value={job.id}>
+                            {job.title}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="job">Job Position</Label>
-              <Select>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select job" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="1">Senior Frontend Developer</SelectItem>
-                  <SelectItem value="2">Backend Engineer</SelectItem>
-                  <SelectItem value="3">Full Stack Developer</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
 
-          <div className="grid grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="salary">Salary Amount</Label>
-              <Input id="salary" type="number" placeholder="120000" />
+            <div className="grid grid-cols-3 gap-4">
+              <FormField
+                control={form.control}
+                name="salary.amount"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Salary Amount</FormLabel>
+                    <FormControl>
+                      <Input 
+                        type="number" 
+                        placeholder="120000" 
+                        {...field}
+                        onChange={(e) => field.onChange(Number(e.target.value))}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={form.control}
+                name="salary.currency"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Currency</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="USD">USD</SelectItem>
+                        <SelectItem value="EUR">EUR</SelectItem>
+                        <SelectItem value="GBP">GBP</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={form.control}
+                name="salary.frequency"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Frequency</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="hourly">Hourly</SelectItem>
+                        <SelectItem value="monthly">Monthly</SelectItem>
+                        <SelectItem value="yearly">Yearly</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="currency">Currency</Label>
-              <Select defaultValue="USD">
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="USD">USD</SelectItem>
-                  <SelectItem value="EUR">EUR</SelectItem>
-                  <SelectItem value="GBP">GBP</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="frequency">Frequency</Label>
-              <Select defaultValue="yearly">
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="hourly">Hourly</SelectItem>
-                  <SelectItem value="monthly">Monthly</SelectItem>
-                  <SelectItem value="yearly">Yearly</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="startDate">Start Date</Label>
-              <Input id="startDate" type="date" />
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="startDate"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Start Date</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={form.control}
+                name="expiresAt"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Offer Expires</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="expiryDate">Offer Expires</Label>
-              <Input id="expiryDate" type="date" />
-            </div>
-          </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="terms">Terms & Conditions</Label>
-            <Textarea 
-              id="terms" 
-              placeholder="Enter the terms and conditions for this offer..."
-              rows={3}
+            <FormField
+              control={form.control}
+              name="terms"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Terms & Conditions</FormLabel>
+                  <FormControl>
+                    <Textarea 
+                      placeholder="Enter the terms and conditions for this offer..."
+                      rows={3}
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
             />
-          </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="benefits">Benefits (comma-separated)</Label>
-            <Input id="benefits" placeholder="Health Insurance, 401k, Remote Work, PTO" />
-          </div>
-        </div>
-
-        <div className="flex justify-end space-x-2">
-          <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
-            Cancel
-          </Button>
-          <Button>Create Offer</Button>
-        </div>
+            <div className="flex justify-end space-x-2">
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={() => setIsCreateDialogOpen(false)}
+                disabled={createOfferMutation.isPending}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={createOfferMutation.isPending}>
+                {createOfferMutation.isPending ? 'Creating...' : 'Create Offer'}
+              </Button>
+            </div>
+          </form>
+        </Form>
       </DialogContent>
     </Dialog>
   );
 
-  const totalOffers = offers.length;
-  const pendingOffers = offers.filter(o => ['sent', 'viewed'].includes(o.status)).length;
-  const acceptedOffers = offers.filter(o => o.status === 'accepted').length;
-  const rejectedOffers = offers.filter(o => o.status === 'rejected').length;
+  const totalOffers = offers?.length || 0;
+  const pendingOffers = offers?.filter(o => ['sent', 'viewed'].includes(o.status)).length || 0;
+  const acceptedOffers = offers?.filter(o => o.status === 'accepted').length || 0;
+  const rejectedOffers = offers?.filter(o => o.status === 'rejected').length || 0;
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Offers & Contracts</h1>
+          <h1 className="text-3xl font-bold">Offers Management</h1>
           <p className="text-muted-foreground">
-            Manage job offers and track candidate responses
+            Create, send, and track job offers with automated workflows
           </p>
         </div>
         <Button onClick={() => setIsCreateDialogOpen(true)}>
@@ -348,30 +498,43 @@ export default function Offers() {
 
       {/* Summary Stats */}
       <div className="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Offers</CardTitle>
-            <div className="text-2xl font-bold">{totalOffers}</div>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Pending Response</CardTitle>
-            <div className="text-2xl font-bold text-yellow-600">{pendingOffers}</div>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Accepted</CardTitle>
-            <div className="text-2xl font-bold text-green-600">{acceptedOffers}</div>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Rejected</CardTitle>
-            <div className="text-2xl font-bold text-red-600">{rejectedOffers}</div>
-          </CardHeader>
-        </Card>
+        {isLoading ? (
+          Array.from({ length: 4 }).map((_, index) => (
+            <Card key={index}>
+              <CardHeader className="pb-2">
+                <Skeleton className="h-4 w-32 mb-2" />
+                <Skeleton className="h-8 w-16" />
+              </CardHeader>
+            </Card>
+          ))
+        ) : (
+          <>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Total Offers</CardTitle>
+                <div className="text-2xl font-bold">{totalOffers}</div>
+              </CardHeader>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Pending Response</CardTitle>
+                <div className="text-2xl font-bold text-yellow-600">{pendingOffers}</div>
+              </CardHeader>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Accepted</CardTitle>
+                <div className="text-2xl font-bold text-green-600">{acceptedOffers}</div>
+              </CardHeader>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Rejected</CardTitle>
+                <div className="text-2xl font-bold text-red-600">{rejectedOffers}</div>
+              </CardHeader>
+            </Card>
+          </>
+        )}
       </div>
 
       {/* Filters */}
@@ -413,9 +576,48 @@ export default function Offers() {
 
       {/* Offer Listings */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {offers.map((offer) => (
-          <OfferCard key={offer.id} offer={offer} />
-        ))}
+        {isLoading ? (
+          Array.from({ length: 6 }).map((_, index) => (
+            <Card key={index} className="hover:shadow-md transition-shadow">
+              <CardHeader className="pb-4">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-start space-x-4">
+                    <Skeleton className="h-12 w-12 rounded-full" />
+                    <div className="flex-1 space-y-2">
+                      <Skeleton className="h-4 w-24" />
+                      <Skeleton className="h-3 w-32" />
+                      <Skeleton className="h-3 w-40" />
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Skeleton className="h-5 w-16" />
+                    <Skeleton className="h-8 w-8" />
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <Skeleton className="h-8 w-full" />
+                  <Skeleton className="h-8 w-full" />
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <Skeleton key={i} className="h-5 w-16" />
+                  ))}
+                </div>
+                <Skeleton className="h-12 w-full" />
+                <div className="space-y-1">
+                  <Skeleton className="h-3 w-full" />
+                  <Skeleton className="h-3 w-3/4" />
+                </div>
+              </CardContent>
+            </Card>
+          ))
+        ) : (
+          offers?.map((offer) => (
+            <OfferCard key={offer.id} offer={offer} />
+          )) || []
+        )}
       </div>
 
       <CreateOfferDialog />
