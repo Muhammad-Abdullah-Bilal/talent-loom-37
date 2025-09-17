@@ -17,9 +17,13 @@ import { mockKPIData, mockPipelineItems, mockJobPostings } from "@/lib/mockData"
 import { Link } from "react-router-dom";
 
 export default function Dashboard() {
+  console.log("Dashboard component is rendering");
+  
   const kpiData = mockKPIData;
   const recentMatches = mockPipelineItems.slice(0, 3);
   const activeJobs = mockJobPostings.filter(job => job.status === 'active').slice(0, 3);
+
+  console.log("Dashboard data loaded:", { kpiData, recentMatches: recentMatches.length, activeJobs: activeJobs.length });
 
   const kpiCards = [
     {
