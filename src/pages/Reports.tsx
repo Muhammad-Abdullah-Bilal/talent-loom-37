@@ -17,7 +17,8 @@ import {
   AlertCircle,
   Loader2
 } from "lucide-react";
-import { useDashboard, usePipeline, useOffers } from "@/hooks/useApi";
+import { useDashboard, usePipeline, useOffers, useAsyncExport, useExportStatus } from "@/hooks/useApi";
+import { useReportsSubscription } from "@/hooks/useRealtime";
 import { reportsApi } from "@/lib/api";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "sonner";
@@ -43,10 +44,18 @@ export default function Reports() {
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
   const [selectedReport, setSelectedReport] = useState("overview");
   const [isExporting, setIsExporting] = useState(false);
+  const [exportJobId, setExportJobId] = useState<string | null>(null);
 
   const { data: kpiData, isLoading: kpiLoading, error } = useDashboard();
   const { data: pipelineData } = usePipeline();
   const { data: offersData } = useOffers();
+  const asyncExportMutation = useAsyncExport();
+  
+  // Subscribe to report updates
+  useReportsSubscription();
+  
+  // Monitor export status
+  const { data: exportStatus } = useExportStatus(exportJobId || '');
 
   if (error) {
     return (
@@ -121,27 +130,36 @@ export default function Reports() {
       return;
     }
 
-    setIsExporting(true);
+    // Try async export first
     try {
-      const csvContent = await reportsApi.exportCSV(reportData);
-      
-      // Create and download CSV file
-      const blob = new Blob([csvContent], { type: 'text/csv' });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `hiring-report-${new Date().toISOString().split('T')[0]}.csv`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-      
-      toast.success("CSV exported successfully!");
+      const result = await asyncExportMutation.mutateAsync({ 
+        type: 'csv', 
+        params: { data: reportData, dateRange, selectedReport } 
+      });
+      setExportJobId(result.jobId);
     } catch (error) {
-      toast.error("Failed to export CSV");
-      console.error("CSV export error:", error);
-    } finally {
-      setIsExporting(false);
+      // Fallback to sync export
+      setIsExporting(true);
+      try {
+        const csvContent = await reportsApi.exportCSV(reportData);
+        
+        const blob = new Blob([csvContent], { type: 'text/csv' });
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `hiring-report-${new Date().toISOString().split('T')[0]}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+        
+        toast.success("CSV exported successfully!");
+      } catch (syncError) {
+        toast.error("Failed to export CSV");
+        console.error("CSV export error:", syncError);
+      } finally {
+        setIsExporting(false);
+      }
     }
   };
 
@@ -151,26 +169,35 @@ export default function Reports() {
       return;
     }
 
-    setIsExporting(true);
+    // Try async export first
     try {
-      const pdfBlob = await reportsApi.exportPDF(reportData);
-      
-      // Create and download PDF file
-      const url = window.URL.createObjectURL(pdfBlob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `hiring-report-${new Date().toISOString().split('T')[0]}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-      
-      toast.success("PDF exported successfully!");
+      const result = await asyncExportMutation.mutateAsync({ 
+        type: 'pdf', 
+        params: { data: reportData, dateRange, selectedReport } 
+      });
+      setExportJobId(result.jobId);
     } catch (error) {
-      toast.error("Failed to export PDF");
-      console.error("PDF export error:", error);
-    } finally {
-      setIsExporting(false);
+      // Fallback to sync export
+      setIsExporting(true);
+      try {
+        const pdfBlob = await reportsApi.exportPDF(reportData);
+        
+        const url = window.URL.createObjectURL(pdfBlob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `hiring-report-${new Date().toISOString().split('T')[0]}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+        
+        toast.success("PDF exported successfully!");
+      } catch (syncError) {
+        toast.error("Failed to export PDF");
+        console.error("PDF export error:", syncError);
+      } finally {
+        setIsExporting(false);
+      }
     }
   };
 
@@ -198,9 +225,9 @@ export default function Reports() {
           <Button 
             variant="outline" 
             onClick={handleExportCSV}
-            disabled={isExporting || kpiLoading}
+            disabled={isExporting || kpiLoading || asyncExportMutation.isPending}
           >
-            {isExporting ? (
+            {(isExporting || asyncExportMutation.isPending) ? (
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
             ) : (
               <FileSpreadsheet className="w-4 h-4 mr-2" />
@@ -210,15 +237,33 @@ export default function Reports() {
           <Button 
             variant="outline" 
             onClick={handleExportPDF}
-            disabled={isExporting || kpiLoading}
+            disabled={isExporting || kpiLoading || asyncExportMutation.isPending}
           >
-            {isExporting ? (
+            {(isExporting || asyncExportMutation.isPending) ? (
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
             ) : (
               <Download className="w-4 h-4 mr-2" />
             )}
             Export PDF
           </Button>
+          
+          {exportJobId && exportStatus && (
+            <div className="flex items-center space-x-2 text-sm">
+              <span className="text-muted-foreground">Export Status:</span>
+              <Badge variant={exportStatus.status === 'completed' ? 'default' : 'secondary'}>
+                {exportStatus.status}
+              </Badge>
+              {exportStatus.downloadUrl && (
+                <Button 
+                  size="sm" 
+                  variant="outline"
+                  onClick={() => window.open(exportStatus.downloadUrl, '_blank')}
+                >
+                  Download
+                </Button>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

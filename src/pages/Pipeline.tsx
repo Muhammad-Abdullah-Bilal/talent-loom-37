@@ -11,9 +11,11 @@ import {
   ArrowRight,
   Star,
   Calendar,
-  AlertCircle
+  AlertCircle,
+  Target
 } from "lucide-react";
-import { usePipeline, useMovePipelineCandidate } from "@/hooks/useApi";
+import { usePipeline, useMovePipelineCandidate, usePipelineSuggestion, useUpdatePipelineCandidate } from "@/hooks/useApi";
+import { usePipelineSubscription } from "@/hooks/useRealtime";
 import { PipelineItem, PipelineStage } from "@/types";
 import {
   DropdownMenu,
@@ -34,11 +36,31 @@ const PIPELINE_STAGES: { stage: PipelineStage; title: string; color: string }[] 
 ];
 
 export default function Pipeline() {
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  
   const { data: pipelineItems, isLoading, error } = usePipeline();
   const moveCandidateMutation = useMovePipelineCandidate();
+  const updateCandidateMutation = useUpdatePipelineCandidate();
+  
+  // Subscribe to pipeline updates
+  usePipelineSubscription();
+  
+  // Get AI suggestion for selected item
+  const { data: suggestion, isLoading: suggestionLoading } = usePipelineSuggestion(selectedItemId || '');
 
   const moveCandidate = (itemId: string, newStage: PipelineStage) => {
     moveCandidateMutation.mutate({ itemId, newStage });
+  };
+
+  const handleGetSuggestion = (itemId: string) => {
+    setSelectedItemId(itemId);
+  };
+
+  const handleApplySuggestion = () => {
+    if (selectedItemId && suggestion) {
+      moveCandidate(selectedItemId, suggestion.stage);
+      setSelectedItemId(null);
+    }
   };
 
   if (error) {
@@ -108,6 +130,10 @@ export default function Pipeline() {
                 <DropdownMenuItem>
                   <MessageSquare className="w-4 h-4 mr-2" />
                   Send Message
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleGetSuggestion(item.id)}>
+                  <Target className="w-4 h-4 mr-2" />
+                  Get AI Suggestion
                 </DropdownMenuItem>
                 {PIPELINE_STAGES.filter(s => s.stage !== item.stage).map(stage => (
                   <DropdownMenuItem 
@@ -287,6 +313,53 @@ export default function Pipeline() {
           />
         ))}
       </div>
+
+      {/* AI Suggestion Panel */}
+      {selectedItemId && (
+        <Card className="mt-6 border-primary/20 bg-gradient-to-r from-blue-50/50 to-purple-50/50">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Target className="w-5 h-5 text-primary" />
+                  AI Stage Suggestion
+                </CardTitle>
+                <CardDescription>
+                  Intelligent recommendation for next pipeline stage
+                </CardDescription>
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => setSelectedItemId(null)}>
+                ×
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {suggestionLoading ? (
+              <div className="space-y-2">
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-3/4" />
+              </div>
+            ) : suggestion ? (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="font-medium">Recommended Stage: {suggestion.stage}</div>
+                    <div className="text-sm text-muted-foreground">
+                      Confidence: {Math.round(suggestion.confidence * 100)}%
+                    </div>
+                  </div>
+                  <Button onClick={handleApplySuggestion} disabled={moveCandidateMutation.isPending}>
+                    {moveCandidateMutation.isPending ? 'Moving...' : 'Apply Suggestion'}
+                  </Button>
+                </div>
+                <p className="text-sm leading-relaxed">{suggestion.reasoning}</p>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">No suggestion available.</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

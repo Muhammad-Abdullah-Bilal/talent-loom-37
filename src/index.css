@@ -41,10 +41,22 @@
     --input: 220 13% 91%;
     --ring: 262 83% 58%;
 
-    --gradient-primary: linear-gradient(135deg, hsl(262 83% 58%), hsl(252 56% 57%));
-    --gradient-secondary: linear-gradient(135deg, hsl(220 14% 96%), hsl(0 0% 100%));
-    --gradient-success: linear-gradient(135deg, hsl(142 71% 45%), hsl(120 61% 50%));
-    
+    --gradient-primary: linear-gradient(
+      135deg,
+      hsl(262 83% 58%),
+      hsl(252 56% 57%)
+    );
+    --gradient-secondary: linear-gradient(
+      135deg,
+      hsl(220 14% 96%),
+      hsl(0 0% 100%)
+    );
+    --gradient-success: linear-gradient(
+      135deg,
+      hsl(142 71% 45%),
+      hsl(120 61% 50%)
+    );
+
     --shadow-sm: 0 1px 2px 0 hsl(0 0% 0% / 0.05);
     --shadow-md: 0 4px 6px -1px hsl(0 0% 0% / 0.1);
     --shadow-lg: 0 10px 15px -3px hsl(0 0% 0% / 0.1);

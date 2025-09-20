@@ -15,14 +15,20 @@ import {
   Plus,
   AlertCircle
 } from "lucide-react";
-import { useDashboard, usePipeline, useJobs } from "@/hooks/useApi";
+import { useDashboard, usePipeline, useJobs, useDashboardNarrative } from "@/hooks/useApi";
+import { usePipelineSubscription, useJobsSubscription } from "@/hooks/useRealtime";
 import { Link } from "react-router-dom";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export default function Dashboard() {
   const { data: kpiData, isLoading: kpiLoading, error: kpiError } = useDashboard();
+  const { data: narrativeData, isLoading: narrativeLoading } = useDashboardNarrative();
   const { data: pipelineData, isLoading: pipelineLoading } = usePipeline();
   const { data: jobsData, isLoading: jobsLoading } = useJobs();
+
+  // Subscribe to realtime updates
+  usePipelineSubscription();
+  useJobsSubscription();
 
   const recentMatches = pipelineData?.slice(0, 3) || [];
   const activeJobs = jobsData?.filter(job => job.status === 'active').slice(0, 3) || [];
@@ -133,18 +139,33 @@ export default function Dashboard() {
 
       {/* Main Content Grid */}
       <div className="grid gap-6 lg:grid-cols-3">
-        {/* Metrics Overview */}
+        {/* AI-Powered Insights */}
         <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Target className="w-5 h-5" />
-              Hiring Performance
+              AI-Powered Insights
             </CardTitle>
             <CardDescription>
-              Key metrics for this month
+              Intelligent analysis of your hiring performance
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
+            {/* AI Narrative */}
+            {narrativeLoading ? (
+              <div className="space-y-2">
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-4 w-5/6" />
+              </div>
+            ) : narrativeData ? (
+              <div className="p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border">
+                <p className="text-sm leading-relaxed text-foreground">
+                  {narrativeData}
+                </p>
+              </div>
+            ) : null}
+
             {kpiLoading ? (
               <div className="space-y-6">
                 <div className="space-y-2">
@@ -172,7 +193,7 @@ export default function Dashboard() {
                     <span className="text-sm font-medium">Average Time to Hire</span>
                     <span className="text-sm text-muted-foreground">{kpiData.averageTimeToHire} days</span>
                   </div>
-                  <Progress value={65} className="h-2" />
+                  <Progress value={Math.min((30 - kpiData.averageTimeToHire) / 30 * 100, 100)} className="h-2" />
                 </div>
 
                 {/* Conversion Rate */}

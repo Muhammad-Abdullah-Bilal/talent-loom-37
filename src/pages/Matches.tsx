@@ -15,8 +15,9 @@ import {
   Brain,
   AlertCircle
 } from "lucide-react";
-import { useMatches, useCandidates, useJobs, useAddToPipeline } from "@/hooks/useApi";
+import { useMatches, useCandidates, useJobs, useAddToPipeline, useMatchExplanation, useRefreshMatchIndex } from "@/hooks/useApi";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useState } from "react";
 import {
   Select,
   SelectContent,
@@ -26,10 +27,20 @@ import {
 } from "@/components/ui/select";
 
 export default function Matches() {
+  const [selectedJobId, setSelectedJobId] = useState<string>('all');
+  const [selectedMatch, setSelectedMatch] = useState<{ candidateId: string; jobId: string } | null>(null);
+  
   const { data: matches, isLoading: matchesLoading, error } = useMatches();
   const { data: candidates } = useCandidates();
   const { data: jobs } = useJobs();
   const addToPipelineMutation = useAddToPipeline();
+  const refreshIndexMutation = useRefreshMatchIndex();
+  
+  // Get AI explanation for selected match
+  const { data: explanation, isLoading: explanationLoading } = useMatchExplanation(
+    selectedMatch?.candidateId || '',
+    selectedMatch?.jobId || ''
+  );
 
   // Combine match data with candidate and job info
   const enrichedMatches = (matches || []).map(match => {
@@ -38,8 +49,21 @@ export default function Matches() {
     return { ...match, candidate, job };
   }).filter(match => match.candidate && match.job);
 
+  // Filter matches by selected job
+  const filteredMatches = selectedJobId === 'all' 
+    ? enrichedMatches 
+    : enrichedMatches.filter(match => match.jobId === selectedJobId);
+
   const handleAddToPipeline = (candidateId: string, jobId: string) => {
     addToPipelineMutation.mutate({ candidateId, jobId });
+  };
+
+  const handleRefreshIndex = () => {
+    refreshIndexMutation.mutate();
+  };
+
+  const handleViewExplanation = (candidateId: string, jobId: string) => {
+    setSelectedMatch({ candidateId, jobId });
   };
 
   if (error) {
@@ -202,6 +226,14 @@ export default function Matches() {
               <Plus className="w-3 h-3 mr-1" />
               {addToPipelineMutation.isPending ? 'Adding...' : 'Add to Pipeline'}
             </Button>
+            <Button 
+              size="sm" 
+              variant="outline"
+              onClick={() => handleViewExplanation(candidate.id, job.id)}
+            >
+              <Brain className="w-3 h-3 mr-1" />
+              AI Explain
+            </Button>
             <Button size="sm" variant="outline">
               <Eye className="w-3 h-3 mr-1" />
               View Profile
@@ -223,7 +255,7 @@ export default function Matches() {
           </p>
         </div>
         <div className="flex items-center space-x-4">
-          <Select defaultValue="all">
+          <Select value={selectedJobId} onValueChange={setSelectedJobId}>
             <SelectTrigger className="w-40">
               <SelectValue />
             </SelectTrigger>
@@ -236,6 +268,14 @@ export default function Matches() {
               )) || []}
             </SelectContent>
           </Select>
+          <Button 
+            variant="outline" 
+            onClick={handleRefreshIndex}
+            disabled={refreshIndexMutation.isPending}
+          >
+            <Brain className="w-4 h-4 mr-2" />
+            {refreshIndexMutation.isPending ? 'Refreshing...' : 'Refresh AI Index'}
+          </Button>
         </div>
       </div>
 
@@ -244,14 +284,14 @@ export default function Matches() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Total Matches</CardTitle>
-            <div className="text-2xl font-bold">{enrichedMatches.length}</div>
+            <div className="text-2xl font-bold">{filteredMatches.length}</div>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">High Quality (90%+)</CardTitle>
             <div className="text-2xl font-bold text-green-600">
-              {enrichedMatches.filter(m => m.score >= 90).length}
+              {filteredMatches.filter(m => m.score >= 90).length}
             </div>
           </CardHeader>
         </Card>
@@ -259,7 +299,7 @@ export default function Matches() {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Good Matches (80%+)</CardTitle>
             <div className="text-2xl font-bold text-blue-600">
-              {enrichedMatches.filter(m => m.score >= 80).length}
+              {filteredMatches.filter(m => m.score >= 80).length}
             </div>
           </CardHeader>
         </Card>
@@ -267,7 +307,7 @@ export default function Matches() {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Average Score</CardTitle>
             <div className="text-2xl font-bold">
-              {enrichedMatches.length > 0 ? Math.round(enrichedMatches.reduce((sum, m) => sum + m.score, 0) / enrichedMatches.length) : 0}%
+              {filteredMatches.length > 0 ? Math.round(filteredMatches.reduce((sum, m) => sum + m.score, 0) / filteredMatches.length) : 0}%
             </div>
           </CardHeader>
         </Card>
@@ -304,6 +344,15 @@ export default function Matches() {
                 <SelectItem value="70">70%+ matches</SelectItem>
               </SelectContent>
             </Select>
+            
+            {selectedMatch && (
+              <Button 
+                variant="outline" 
+                onClick={() => setSelectedMatch(null)}
+              >
+                Clear Selection
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -353,13 +402,41 @@ export default function Matches() {
             </Card>
           ))
         ) : (
-          enrichedMatches
+          filteredMatches
             .sort((a, b) => b.score - a.score)
             .map((match) => (
               <MatchCard key={`${match.candidateId}-${match.jobId}`} match={match} />
             ))
         )}
       </div>
+
+      {/* AI Explanation Modal */}
+      {selectedMatch && (
+        <Card className="mt-6 border-primary/20 bg-gradient-to-r from-blue-50/50 to-purple-50/50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Brain className="w-5 h-5 text-primary" />
+              AI Match Explanation
+            </CardTitle>
+            <CardDescription>
+              Detailed analysis of why this candidate matches the job requirements
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {explanationLoading ? (
+              <div className="space-y-2">
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-4 w-5/6" />
+              </div>
+            ) : explanation ? (
+              <p className="text-sm leading-relaxed">{explanation}</p>
+            ) : (
+              <p className="text-sm text-muted-foreground">No explanation available.</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

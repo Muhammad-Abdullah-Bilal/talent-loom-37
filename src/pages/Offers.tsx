@@ -15,9 +15,11 @@ import {
   Send,
   FileText,
   MoreHorizontal,
-  AlertCircle
+  AlertCircle,
+  MessageSquare
 } from "lucide-react";
-import { useOffers, useCreateOffer, useCandidates, useJobs } from "@/hooks/useApi";
+import { useOffers, useCreateOffer, useCandidates, useJobs, useOfferSummary, useGenerateVoiceNarration } from "@/hooks/useApi";
+import { useOffersSubscription } from "@/hooks/useRealtime";
 import { Offer } from "@/types";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
@@ -51,11 +53,19 @@ import { offerSchema, OfferFormData } from "@/lib/validations";
 
 export default function Offers() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [selectedOfferId, setSelectedOfferId] = useState<string | null>(null);
   
   const { data: offers, isLoading, error } = useOffers();
   const { data: candidates } = useCandidates();
   const { data: jobs } = useJobs();
   const createOfferMutation = useCreateOffer();
+  const generateVoiceMutation = useGenerateVoiceNarration();
+  
+  // Subscribe to offer updates
+  useOffersSubscription();
+  
+  // Get AI summary for selected offer
+  const { data: offerSummary, isLoading: summaryLoading } = useOfferSummary(selectedOfferId || '');
 
   const form = useForm<OfferFormData>({
     resolver: zodResolver(offerSchema),
@@ -92,6 +102,14 @@ export default function Offers() {
         form.reset();
       },
     });
+  };
+
+  const handleGenerateVoice = (offerId: string) => {
+    generateVoiceMutation.mutate({ offerId });
+  };
+
+  const handleViewSummary = (offerId: string) => {
+    setSelectedOfferId(offerId);
   };
 
   if (error) {
@@ -175,6 +193,14 @@ export default function Offers() {
                   <DropdownMenuItem>
                     <FileText className="w-4 h-4 mr-2" />
                     Edit Offer
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleViewSummary(offer.id)}>
+                    <Eye className="w-4 h-4 mr-2" />
+                    AI Summary
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleGenerateVoice(offer.id)}>
+                    <MessageSquare className="w-4 h-4 mr-2" />
+                    Generate Voice
                   </DropdownMenuItem>
                   {offer.status === 'draft' && (
                     <DropdownMenuItem>
@@ -621,6 +647,52 @@ export default function Offers() {
       </div>
 
       <CreateOfferDialog />
+
+      {/* AI Summary Panel */}
+      {selectedOfferId && (
+        <Card className="mt-6 border-primary/20 bg-gradient-to-r from-blue-50/50 to-purple-50/50">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-primary" />
+                  AI Offer Summary
+                </CardTitle>
+                <CardDescription>
+                  Intelligent analysis and summary of the offer details
+                </CardDescription>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => handleGenerateVoice(selectedOfferId)}
+                  disabled={generateVoiceMutation.isPending}
+                >
+                  <MessageSquare className="w-4 h-4 mr-2" />
+                  {generateVoiceMutation.isPending ? 'Generating...' : 'Generate Voice'}
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => setSelectedOfferId(null)}>
+                  ×
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {summaryLoading ? (
+              <div className="space-y-2">
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-4 w-5/6" />
+              </div>
+            ) : offerSummary ? (
+              <p className="text-sm leading-relaxed">{offerSummary}</p>
+            ) : (
+              <p className="text-sm text-muted-foreground">No summary available.</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
